@@ -15,7 +15,7 @@ class KeyboardTeleop:
         rospy.loginfo('Cmd Vel topic: ' + cmd_vel_topic)
 
         #self.pub = rospy.Publisher(cmd_vel_topic, Twist, queue_size=10) 
-	self.pub = rospy.Publisher('/controller/cmd_vel', Twist, queue_size=10) 
+        self.pub = rospy.Publisher('/controller/cmd_vel', Twist, queue_size=10) 
 
         self.key_state_vel = 0
         self.key_state_ang = 0
@@ -38,8 +38,8 @@ class KeyboardTeleop:
         self.keyboard_listener.join()    
 
     def update_key_state(self):
-        self.target_linear_vel = # --- Enter equation for linear speed ---
-        self.target_angular_vel = # --- Enter equation for angular speed ---
+        self.target_linear_vel = self.key_state_vel * MINICAR_MAX_LIN_VEL * self.speed_mul
+        self.target_angular_vel = self.key_state_ang * MINICAR_MAX_ANG_VEL * self.speed_mul
         twist = Twist()
         twist.linear.x = self.target_linear_vel; twist.linear.y = 0.0; twist.linear.z = 0.0
         twist.angular.x = 0.0; twist.angular.y = 0.0; twist.angular.z = self.target_angular_vel
@@ -49,7 +49,17 @@ class KeyboardTeleop:
         if key == KeyCode.from_char('w'):
             self.key_state_vel = 1
 		
-		# --- enter key code here ---
+		# Forward/Backward controls
+        if key == KeyCode.from_char('w'):
+            self.key_state_vel = 1
+        elif key == KeyCode.from_char('s'):
+            self.key_state_vel = -1
+        
+        # Left/Right controls
+        elif key == KeyCode.from_char('a'):
+            self.key_state_ang = 1
+        elif key == KeyCode.from_char('d'):
+            self.key_state_ang = -1
 		
         self.update_key_state()
         return True
@@ -58,7 +68,17 @@ class KeyboardTeleop:
         if key == KeyCode.from_char('w') and self.key_state_vel != 0:
             self.key_state_vel = 0
 			
-		# --- enter key code here ---
+		# Reset forward/backward state
+        if key == KeyCode.from_char('w') and self.key_state_vel > 0:
+            self.key_state_vel = 0
+        elif key == KeyCode.from_char('s') and self.key_state_vel < 0:
+            self.key_state_vel = 0
+        
+        # Reset left/right state
+        elif key == KeyCode.from_char('a') and self.key_state_ang > 0:
+            self.key_state_ang = 0
+        elif key == KeyCode.from_char('d') and self.key_state_ang < 0:
+            self.key_state_ang = 0
 		
         self.update_key_state()
         return True
