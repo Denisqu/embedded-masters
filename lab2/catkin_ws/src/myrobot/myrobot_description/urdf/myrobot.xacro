@@ -26,13 +26,13 @@
   <link name="base_link">
     <visual>
       <geometry>
-        <box size="0.4 0.3 0.1"/>
+        <box size="0.4 0.3 0.07"/>
       </geometry>
       <material name="Gray"/>
     </visual>
     <collision>
       <geometry>
-        <box size="0.4 0.3 0.1"/>
+        <box size="0.4 0.3 0.07"/>
       </geometry>
     </collision>
     <inertial>
@@ -43,33 +43,65 @@
 
     <!-- ============ Enter wheels code here =============== -->
 
-  <!-- Left Wheel -->
-<xacro:wheel wheel_prefix="left" parent_link="base_link" left_right="1" radius="0.09" width="0.02" wheel_mass="1.0">
-  <origin xyz="0 0.165 0.00" rpy="0 1.5 0"/>
+  <!-- Rear Left Wheel -->
+<xacro:wheel wheel_prefix="rear_left" parent_link="base_link" left_right="1" radius="0.06" width="0.02" wheel_mass="1.0">
+  <origin xyz="-0.14 0.165 0.00" rpy="0 1.5 0"/>
 </xacro:wheel>
 
-<!-- Right Wheel -->
-<xacro:wheel wheel_prefix="right" parent_link="base_link" left_right="-1" radius="0.09" width="0.02" wheel_mass="1.0">
-  <origin xyz="0 -0.165 0.00" rpy="0 1.5 0"/>
+<!-- Rear Right Wheel -->
+<xacro:wheel wheel_prefix="rear_right" parent_link="base_link" left_right="-1" radius="0.06" width="0.02" wheel_mass="1.0">
+  <origin xyz="-0.14 -0.165 0.00" rpy="0 1.5 0"/>
+</xacro:wheel>
+
+<!-- Front Left Wheel -->
+<xacro:wheel wheel_prefix="front_left" parent_link="base_link" left_right="1" radius="0.06" width="0.02" wheel_mass="1.0">
+  <origin xyz="0.14 0.165 0.00" rpy="0 1.5 0"/>
+</xacro:wheel>
+
+<!-- Front Right Wheel -->
+<xacro:wheel wheel_prefix="front_right" parent_link="base_link" left_right="-1" radius="0.06" width="0.02" wheel_mass="1.0">
+  <origin xyz="0.14 -0.165 0.00" rpy="0 1.5 0"/>
 </xacro:wheel>
 
     <!-- ============ Enter sensors code here =============== -->
     <!-- ============ LIDAR =============== -->
 
-<xacro:make_box_link parent="base_link" name="rplidar_a2_frame" sx="0.01" sy="0.01" sz="0.1" mass="0.1" xyz="0.0 0.0 0.05">
-</xacro:make_box_link>
+<joint name="rplidar_a2_joint" type="fixed">
+    <axis xyz="0 1 0"/>
+    <origin rpy="0 0 ${PI}" xyz="0 0 ${0.08}"/>
+    <parent link="base_link"/>
+    <child link="rplidar_a2_frame"/>
+</joint>
+
+<link name="rplidar_a2_frame">
+    <collision>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <geometry>
+            <cylinder radius="0.0385" length="0.04"/>
+        </geometry>
+    </collision>
+    <visual>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <geometry>
+            <cylinder radius="0.0385" length="0.04"/>
+        </geometry>
+        <material name="black">
+            <color rgba="0.0 0.0 0.0 1.0"/>
+        </material>
+    </visual>
+</link>
 
     <!-- ============ IR sensors =============== -->
 <xacro:ir_sensor name="front_0" parent="base_link" sx="0.01" sy="0.01" sz="0.01">
-  <origin xyz="0.2 0.0 0.00" rpy="0 0 0"/>
+  <origin xyz="0.4 0.0 0.00" rpy="0 0 0"/>
 </xacro:ir_sensor>
 
 <xacro:ir_sensor name="front_1" parent="base_link" sx="0.01" sy="0.01" sz="0.01">
-  <origin xyz="0.2 0.15 0.00" rpy="0 0 0.785"/>
+  <origin xyz="0.4 0.15 0.00" rpy="0 0 0.785"/>
 </xacro:ir_sensor>
 
 <xacro:ir_sensor name="front_2" parent="base_link" sx="0.01" sy="0.01" sz="0.01">
-  <origin xyz="0.2 -0.15 0.00" rpy="0 0 -0.785"/>
+  <origin xyz="0.4 -0.15 0.00" rpy="0 0 -0.785"/>
 </xacro:ir_sensor>
 
 </robot>

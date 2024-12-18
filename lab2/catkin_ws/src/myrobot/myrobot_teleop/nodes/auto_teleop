@@ -25,7 +25,7 @@ class AutoTeleop:
         # Control parameters
         self.min_safe_distance = 0.3     # Minimum distance to obstacles
         self.target_wall_distance = 0.34   # Desired distance from wall
-        self.linear_speed = 1         # Forward speed
+        self.linear_speed = 0.5         # Forward speed
         self.angular_speed = 0.8          # Turning speed
         
         # Search pattern parameters
