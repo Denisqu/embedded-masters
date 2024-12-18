@@ -9,4 +9,19 @@
     <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so"/>
   </gazebo>
 
+    <xacro:ir_sensor_gazebo name="front_0">
+    <topicName>/myrobot/sensor/front_0</topicName>
+    <frameName>ir_sensor_front_0</frameName>
+  </xacro:ir_sensor_gazebo>
+
+  <xacro:ir_sensor_gazebo name="front_1">
+    <topicName>/myrobot/sensor/front_1</topicName>
+    <frameName>ir_sensor_front_1</frameName>
+  </xacro:ir_sensor_gazebo>
+
+  <xacro:ir_sensor_gazebo name="front_2">
+    <topicName>/myrobot/sensor/front_2</topicName>
+    <frameName>ir_sensor_front_2</frameName>
+  </xacro:ir_sensor_gazebo>
+
 </robot>

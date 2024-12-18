@@ -1,0 +1,137 @@
+#!/usr/bin/env python
+
+import rospy
+from geometry_msgs.msg import Twist
+from sensor_msgs.msg import Range
+
+class AutoTeleop:
+    def __init__(self):
+        # Initialize the node
+        rospy.init_node('auto_teleop')
+        
+        # Create publisher for robot movement
+        self.pub = rospy.Publisher('/controller/cmd_vel', Twist, queue_size=10)
+        
+        # Initialize sensor values
+        self.front_0_range = float('inf')  # Center sensor
+        self.front_1_range = float('inf')  # Left sensor
+        self.front_2_range = float('inf')  # Right sensor
+        
+        # Subscribe to IR sensors
+        rospy.Subscriber('/myrobot/sensor/front_0', Range, self.front_0_callback)  # Center
+        rospy.Subscriber('/myrobot/sensor/front_1', Range, self.front_1_callback)  # Left
+        rospy.Subscriber('/myrobot/sensor/front_2', Range, self.front_2_callback)  # Right
+        
+        # Control parameters
+        self.min_safe_distance = 0.3     # Minimum distance to obstacles
+        self.target_wall_distance = 0.34   # Desired distance from wall
+        self.linear_speed = 1         # Forward speed
+        self.angular_speed = 0.8          # Turning speed
+        
+        # Search pattern parameters
+        self.is_searching = True          # Start in search mode
+        self.search_direction = 1         # 1 for right, -1 for left
+        self.max_range = 0.35            # Maximum sensor range
+        
+        # Control rate (10 Hz)
+        self.rate = rospy.Rate(10)
+        
+        rospy.loginfo("Maze navigation started")
+
+    def front_0_callback(self, msg):
+        self.front_0_range = msg.range  # Center
+
+    def front_1_callback(self, msg):
+        self.front_1_range = msg.range  # Left
+
+    def front_2_callback(self, msg):
+        self.front_2_range = msg.range  # Right
+
+    def all_sensors_at_max(self):
+        # Check if all sensors are reading maximum range (no walls detected)
+        return (abs(self.front_0_range - self.max_range) < 0.01 and
+                abs(self.front_1_range - self.max_range) < 0.01 and
+                abs(self.front_2_range - self.max_range) < 0.01)
+
+    def get_twist_command(self):
+        twist = Twist()
+        
+        # Print sensor readings for debugging
+        rospy.loginfo("Sensors - Center: %.2f, Left: %.2f, Right: %.2f" % 
+                     (self.front_0_range, self.front_1_range, self.front_2_range))
+
+        # If all sensors show max range, we need to search for walls
+        if self.all_sensors_at_max():
+            if self.is_searching:
+                # Move forward while turning slightly to search for walls
+                twist.linear.x = self.linear_speed
+                twist.angular.z = 0
+                rospy.loginfo("Searching for walls - moving forward")
+            else:
+                # Start searching
+                self.is_searching = True
+            return twist
+
+        # We found a wall, stop searching
+        self.is_searching = False
+        
+        # Check if we're too close to a wall in front
+        if self.front_0_range < self.min_safe_distance:
+            # Stop and turn right if wall is directly ahead
+            twist.linear.x = 0.0
+            twist.angular.z = -self.angular_speed
+            rospy.loginfo("Wall ahead - turning right")
+            return twist
+            
+        # Check left wall distance
+        if self.front_1_range < self.min_safe_distance:
+            # Too close to left wall - turn slightly right
+            twist.linear.x = self.linear_speed * 0.5
+            twist.angular.z = -self.angular_speed
+            rospy.loginfo("Too close to left wall - adjusting right")
+            return twist
+            
+        # Check right wall distance
+        if self.front_2_range < self.min_safe_distance:
+            # Too close to right wall - turn slightly left
+            twist.linear.x = self.linear_speed * 0.5
+            twist.angular.z = self.angular_speed
+            rospy.loginfo("Too close to right wall - adjusting left")
+            return twist
+            
+        # If we can detect the right wall but aren't too close
+        if self.front_2_range < self.max_range:
+            # Follow the right wall
+            error = self.front_2_range - self.target_wall_distance
+            twist.linear.x = self.linear_speed
+            # Scale the correction based on the error
+            correction = error * 2.0  # Proportional control
+            twist.angular.z = -correction
+            rospy.loginfo("Following right wall - correction: %.2f" % correction)
+        else:
+            # No right wall detected - turn right to find one
+            twist.linear.x = self.linear_speed * 0.5
+            twist.angular.z = -self.angular_speed
+            rospy.loginfo("No right wall - turning right")
+            
+        return twist
+
+    def run(self):
+        while not rospy.is_shutdown():
+            try:
+                # Get and publish movement command
+                twist = self.get_twist_command()
+                self.pub.publish(twist)
+                
+                # Sleep to maintain control rate
+                self.rate.sleep()
+                
+            except Exception as e:
+                rospy.logerr("Error in control loop: %s" % str(e))
+
+if __name__ == '__main__':
+    try:
+        teleop = AutoTeleop()
+        teleop.run()
+    except rospy.ROSInterruptException:
+        pass

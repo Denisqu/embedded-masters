@@ -12,9 +12,11 @@ sleep 5
 
 gnome-terminal -- bash -c "source ../../devel/setup.sh; roslaunch myrobot_description rviz.launch; exec bash"
 
-sleep 5
+sleep 10
 
 #gnome-terminal -- bash -c "source ../devel/setup.sh; rqt; exec bash"
 
 source ../../devel/setup.sh;
-roslaunch myrobot_teleop teleop_keyboard.launch
+# keyboard: roslaunch myrobot_teleop teleop_keyboard.launch
+
+roslaunch myrobot_teleop teleop_auto.launch
