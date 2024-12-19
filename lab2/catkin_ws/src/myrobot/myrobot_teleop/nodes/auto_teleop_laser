@@ -1,0 +1,336 @@
+#!/usr/bin/env python
+
+# avoid front walls
+# import rospy
+# from geometry_msgs.msg import Twist
+# from sensor_msgs.msg import LaserScan
+
+# class AutoTeleop:
+#     def __init__(self):
+#         rospy.init_node('auto_teleop')
+#         self.pub = rospy.Publisher('/controller/cmd_vel', Twist, queue_size=10)
+#         self.lidar_ranges = []
+        
+#         # Subscribe to LIDAR
+#         rospy.Subscriber('/myrobot/rplidar/scan', LaserScan, self.lidar_callback)
+        
+#         # Control parameters
+#         self.danger_distance = 0.5      # Stop and turn when closer than this
+#         self.caution_distance = 1.0     # Start slowing down at this distance
+#         self.max_linear_speed = 0.8     # Maximum forward speed
+#         self.min_linear_speed = 0.2     # Minimum forward speed
+#         self.angular_speed = 0.4        # Turning speed
+        
+#         self.rate = rospy.Rate(10)
+#         rospy.loginfo("Navigation started with corrected LIDAR orientation")
+
+#     def lidar_callback(self, msg):
+#         self.lidar_ranges = list(msg.ranges)
+
+#     def get_front_distance(self):
+#         if not self.lidar_ranges:
+#             return 0.0
+            
+#         # The front of the robot is at 180 degrees in LIDAR coordinates
+#         # Get readings from 160 to 200 degrees (+-20 degrees from front)
+#         mid_idx = len(self.lidar_ranges) / 2  # 180 degrees
+#         span = len(self.lidar_ranges) * 20 / 360  # 20 degrees worth of readings
+        
+#         start_idx = int(mid_idx - span)
+#         end_idx = int(mid_idx + span)
+        
+#         # Get the front sector readings
+#         front_ranges = self.lidar_ranges[start_idx:end_idx]
+#         valid_ranges = [r for r in front_ranges if r > 0.1 and r < 5.0]
+        
+#         if valid_ranges:
+#             min_dist = min(valid_ranges)
+#             rospy.loginfo("Valid front ranges found: min distance = %.2f" % min_dist)
+#             return min_dist
+#         return 5.0
+
+#     def run(self):
+#         while not rospy.is_shutdown():
+#             try:
+#                 twist = Twist()
+                
+#                 # Get the distance to obstacles in front
+#                 front_dist = self.get_front_distance()
+#                 rospy.loginfo("Front distance: %.2f" % front_dist)
+                
+#                 if front_dist <= self.danger_distance:
+#                     # Too close - stop and turn
+#                     twist.linear.x = 0.0
+#                     twist.angular.z = self.angular_speed
+#                     rospy.loginfo("Danger - turning away from obstacle")
+                
+#                 elif front_dist <= self.caution_distance:
+#                     # Getting close - slow down and start turning
+#                     speed_factor = (front_dist - self.danger_distance) / (self.caution_distance - self.danger_distance)
+#                     twist.linear.x = self.min_linear_speed + (self.max_linear_speed - self.min_linear_speed) * speed_factor
+#                     twist.angular.z = self.angular_speed * 0.5
+#                     rospy.loginfo("Caution - slowing down and adjusting")
+                
+#                 else:
+#                     # Clear path - move forward at full speed
+#                     twist.linear.x = self.max_linear_speed
+#                     twist.angular.z = 0.0
+#                     rospy.loginfo("Clear path - moving forward")
+                
+#                 self.pub.publish(twist)
+#                 self.rate.sleep()
+                
+#             except Exception as e:
+#                 rospy.logerr("Error in control loop: %s" % str(e))
+
+# if __name__ == '__main__':
+#     try:
+#         teleop = AutoTeleop()
+#         teleop.run()
+#     except rospy.ROSInterruptException:
+#         pass
+
+#!/usr/bin/env python
+
+#!/usr/bin/env python
+
+# follor right wall:
+# import rospy
+# from geometry_msgs.msg import Twist
+# from sensor_msgs.msg import LaserScan
+
+# class AutoTeleop:
+#     def __init__(self):
+#         rospy.init_node('auto_teleop')
+#         self.pub = rospy.Publisher('/controller/cmd_vel', Twist, queue_size=10)
+#         self.lidar_ranges = []
+        
+#         # Subscribe to LIDAR
+#         rospy.Subscriber('/myrobot/rplidar/scan', LaserScan, self.lidar_callback)
+        
+#         # Control parameters
+#         self.danger_distance = 0.5      # Stop and turn when closer than this
+#         self.caution_distance = 1.0     # Start slowing down at this distance
+#         self.max_linear_speed = 0.8     # Maximum forward speed
+#         self.min_linear_speed = 0.2     # Minimum forward speed
+#         self.angular_speed = 0.4        # Turning speed
+        
+#         # Wall following parameters
+#         self.target_wall_distance = 0.7  # Desired distance from wall
+#         self.max_wall_distance = 2.0    # Maximum distance to detect wall
+        
+#         self.rate = rospy.Rate(10)
+#         rospy.loginfo("Navigation started with corrected wall following")
+
+#     def lidar_callback(self, msg):
+#         self.lidar_ranges = list(msg.ranges)
+
+#     def get_front_distance(self):
+#         if not self.lidar_ranges:
+#             return 0.0
+            
+#         # Front is at 180 degrees
+#         mid_idx = len(self.lidar_ranges) / 2  # 180 degrees
+#         span = len(self.lidar_ranges) * 20 / 360  # 20 degrees worth of readings
+        
+#         start_idx = int(mid_idx - span)
+#         end_idx = int(mid_idx + span)
+        
+#         front_ranges = self.lidar_ranges[start_idx:end_idx]
+#         valid_ranges = [r for r in front_ranges if r > 0.1 and r < 5.0]
+        
+#         if valid_ranges:
+#             return min(valid_ranges)
+#         return 5.0
+
+#     def get_right_distance(self):
+#         if not self.lidar_ranges:
+#             return 0.0
+            
+#         # Right is at 90 degrees (1/4 of the array)
+#         mid_idx = int(len(self.lidar_ranges) * 1 / 4)
+#         span = len(self.lidar_ranges) * 10 / 360  # 10 degrees worth of readings
+        
+#         start_idx = int(mid_idx - span)
+#         end_idx = int(mid_idx + span)
+        
+#         right_ranges = self.lidar_ranges[start_idx:end_idx]
+#         valid_ranges = [r for r in right_ranges if r > 0.1 and r < self.max_wall_distance]
+        
+#         if valid_ranges:
+#             return min(valid_ranges)
+#         return self.max_wall_distance
+
+#     def run(self):
+#         while not rospy.is_shutdown():
+#             try:
+#                 twist = Twist()
+                
+#                 # Get distances
+#                 front_dist = self.get_front_distance()
+#                 right_dist = self.get_right_distance()
+                
+#                 rospy.loginfo("Distances - Front: %.2f, Right: %.2f" % (front_dist, right_dist))
+                
+#                 if front_dist <= self.danger_distance:
+#                     # Too close to obstacle - stop and turn left
+#                     twist.linear.x = 0.0
+#                     twist.angular.z = self.angular_speed
+#                     rospy.loginfo("Danger - turning away from obstacle")
+                
+#                 elif front_dist <= self.caution_distance:
+#                     # Getting close - slow down and start turning left
+#                     speed_factor = (front_dist - self.danger_distance) / (self.caution_distance - self.danger_distance)
+#                     twist.linear.x = self.min_linear_speed + (self.max_linear_speed - self.min_linear_speed) * speed_factor
+#                     twist.angular.z = self.angular_speed * 0.5
+#                     rospy.loginfo("Caution - slowing down and adjusting")
+                
+#                 else:
+#                     # Clear path - follow right wall
+#                     twist.linear.x = self.max_linear_speed
+                    
+#                     if right_dist < self.max_wall_distance:
+#                         # Wall detected - adjust to maintain target distance
+#                         error = right_dist - self.target_wall_distance
+#                         # Limit correction to prevent sharp turns
+#                         correction = max(-0.3, min(0.3, error * 0.5))
+#                         twist.angular.z = -correction  # Negative for right wall following
+#                         rospy.loginfo("Following wall - error: %.2f" % error)
+#                     else:
+#                         # No wall detected - search for one by turning right
+#                         twist.angular.z = -self.angular_speed * 0.3
+#                         rospy.loginfo("Searching for wall")
+                
+#                 self.pub.publish(twist)
+#                 self.rate.sleep()
+                
+#             except Exception as e:
+#                 rospy.logerr("Error in control loop: %s" % str(e))
+
+# if __name__ == '__main__':
+#     try:
+#         teleop = AutoTeleop()
+#         teleop.run()
+#     except rospy.ROSInterruptException:
+#         pass
+
+#!/usr/bin/env python
+
+import rospy
+from geometry_msgs.msg import Twist
+from sensor_msgs.msg import LaserScan
+
+class AutoTeleop:
+    def __init__(self):
+        rospy.init_node('auto_teleop')
+        self.pub = rospy.Publisher('/controller/cmd_vel', Twist, queue_size=10)
+        self.lidar_ranges = []
+        
+        # Subscribe to LIDAR
+        rospy.Subscriber('/myrobot/rplidar/scan', LaserScan, self.lidar_callback)
+        
+        # Control parameters
+        self.danger_distance = 0.5      # Stop and turn when closer than this
+        self.caution_distance = 1.0     # Start slowing down at this distance
+        self.max_linear_speed = 0.8     # Maximum forward speed
+        self.min_linear_speed = 0.2     # Minimum forward speed
+        self.angular_speed = 0.4        # Turning speed
+        
+        # Wall following parameters
+        self.target_wall_distance = 0.7  # Desired distance from wall
+        self.max_wall_distance = 2.0    # Maximum distance to detect wall
+        
+        self.rate = rospy.Rate(10)
+        rospy.loginfo("Navigation started with left wall following")
+
+    def lidar_callback(self, msg):
+        self.lidar_ranges = list(msg.ranges)
+
+    def get_front_distance(self):
+        if not self.lidar_ranges:
+            return 0.0
+            
+        # Front is at 180 degrees
+        mid_idx = len(self.lidar_ranges) / 2  # 180 degrees
+        span = len(self.lidar_ranges) * 20 / 360  # 20 degrees worth of readings
+        
+        start_idx = int(mid_idx - span)
+        end_idx = int(mid_idx + span)
+        
+        front_ranges = self.lidar_ranges[start_idx:end_idx]
+        valid_ranges = [r for r in front_ranges if r > 0.1 and r < 5.0]
+        
+        if valid_ranges:
+            return min(valid_ranges)
+        return 5.0
+
+    def get_left_distance(self):
+        if not self.lidar_ranges:
+            return 0.0
+            
+        # Left is at 270 degrees (3/4 of the array)
+        mid_idx = int(len(self.lidar_ranges) * 3 / 4)
+        span = len(self.lidar_ranges) * 10 / 360  # 10 degrees worth of readings
+        
+        start_idx = int(mid_idx - span)
+        end_idx = int(mid_idx + span)
+        
+        left_ranges = self.lidar_ranges[start_idx:end_idx]
+        valid_ranges = [r for r in left_ranges if r > 0.1 and r < self.max_wall_distance]
+        
+        if valid_ranges:
+            return min(valid_ranges)
+        return self.max_wall_distance
+
+    def run(self):
+        while not rospy.is_shutdown():
+            try:
+                twist = Twist()
+                
+                # Get distances
+                front_dist = self.get_front_distance()
+                left_dist = self.get_left_distance()
+                
+                rospy.loginfo("Distances - Front: %.2f, Left: %.2f" % (front_dist, left_dist))
+                
+                if front_dist <= self.danger_distance:
+                    # Too close to obstacle - stop and turn right
+                    twist.linear.x = 0.0
+                    twist.angular.z = -self.angular_speed  # Negative for right turn
+                    rospy.loginfo("Danger - turning away from obstacle")
+                
+                elif front_dist <= self.caution_distance:
+                    # Getting close - slow down and start turning right
+                    speed_factor = (front_dist - self.danger_distance) / (self.caution_distance - self.danger_distance)
+                    twist.linear.x = self.min_linear_speed + (self.max_linear_speed - self.min_linear_speed) * speed_factor
+                    twist.angular.z = -self.angular_speed * 0.5  # Negative for right turn
+                    rospy.loginfo("Caution - slowing down and adjusting")
+                
+                else:
+                    # Clear path - follow left wall
+                    twist.linear.x = self.max_linear_speed
+                    
+                    if left_dist < self.max_wall_distance:
+                        # Wall detected - adjust to maintain target distance
+                        error = left_dist - self.target_wall_distance
+                        # Limit correction to prevent sharp turns
+                        correction = max(-0.3, min(0.3, error * 0.5))
+                        twist.angular.z = correction  # Positive for left wall following
+                        rospy.loginfo("Following wall - error: %.2f" % error)
+                    else:
+                        # No wall detected - search for one by turning left
+                        twist.angular.z = self.angular_speed * 0.3
+                        rospy.loginfo("Searching for wall")
+                
+                self.pub.publish(twist)
+                self.rate.sleep()
+                
+            except Exception as e:
+                rospy.logerr("Error in control loop: %s" % str(e))
+
+if __name__ == '__main__':
+    try:
+        teleop = AutoTeleop()
+        teleop.run()
+    except rospy.ROSInterruptException:
+        pass

@@ -93,15 +93,15 @@
 
     <!-- ============ IR sensors =============== -->
 <xacro:ir_sensor name="front_0" parent="base_link" sx="0.01" sy="0.01" sz="0.01">
-  <origin xyz="0.4 0.0 0.00" rpy="0 0 0"/>
+  <origin xyz="0.2 0.0 0.00" rpy="0 0 0"/>
 </xacro:ir_sensor>
 
 <xacro:ir_sensor name="front_1" parent="base_link" sx="0.01" sy="0.01" sz="0.01">
-  <origin xyz="0.4 0.15 0.00" rpy="0 0 0.785"/>
+  <origin xyz="0.2 0.15 0.00" rpy="0 0 0.785"/>
 </xacro:ir_sensor>
 
 <xacro:ir_sensor name="front_2" parent="base_link" sx="0.01" sy="0.01" sz="0.01">
-  <origin xyz="0.4 -0.15 0.00" rpy="0 0 -0.785"/>
+  <origin xyz="0.2 -0.15 0.00" rpy="0 0 -0.785"/>
 </xacro:ir_sensor>
 
 </robot>
