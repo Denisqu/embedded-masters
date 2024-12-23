@@ -1,0 +1,254 @@
+#!/usr/bin/env python
+
+import rospy
+import random
+import math
+from geometry_msgs.msg import Twist
+from sensor_msgs.msg import LaserScan
+
+class Gap:
+    def __init__(self, start_idx, end_idx, distance, num_samples):
+        self.start_idx = start_idx
+        self.end_idx = end_idx
+        
+        # Calculate center angle in radians and account for LIDAR's 180-degree rotation
+        center_idx = (start_idx + end_idx) / 2.0
+        raw_angle = (center_idx * 2.0 * math.pi / num_samples)
+        # Add PI to compensate for LIDAR's physical rotation
+        self.angle = (raw_angle + math.pi) % (2 * math.pi) - math.pi  # Keep in [-pi, pi]
+        # Convert to degrees for logging
+        self.angle_deg = math.degrees(self.angle)
+        self.distance = min(distance, 8.0)  # Cap at 8 meters
+
+class AutoTeleop:
+    def __init__(self):
+        rospy.init_node('auto_teleop')
+        self.pub = rospy.Publisher('/controller/cmd_vel', Twist, queue_size=10)
+        self.lidar_ranges = []
+        self.angle_min = 0
+        self.angle_increment = 0
+        
+        # Subscribe to LIDAR
+        rospy.Subscriber('/myrobot/rplidar/scan', LaserScan, self.lidar_callback)
+        
+        # Control parameters
+        self.min_gap_width = 20  # Minimum width in degrees for a traversable gap
+        self.min_gap_depth = 0.5  # Minimum depth in meters for a traversable gap
+        self.max_gap_depth = 8.0  # Maximum distance to consider for gaps
+        self.angular_speed = 0.4
+        self.linear_speed = 0.5
+        self.old_gap = None
+        self.target_distance = 1.0  # Target distance to maintain from obstacles
+        
+        self.rate = rospy.Rate(10)
+        rospy.loginfo("Gap-finding navigation started")
+
+    def lidar_callback(self, msg):
+        self.lidar_ranges = [min(x if not math.isinf(x) else self.max_gap_depth, self.max_gap_depth) for x in msg.ranges]
+        self.angle_min = msg.angle_min
+        self.angle_increment = msg.angle_increment
+        rospy.logdebug("LIDAR data received: %d points", len(self.lidar_ranges))
+
+    def straight_distance(self):
+        if not self.lidar_ranges:
+            return 0.0
+            
+        # Forward is at index num_samples/2 (due to 180-degree rotation)
+        num_samples = len(self.lidar_ranges)
+        mid_idx = num_samples // 2  # This is now our forward direction
+        span = num_samples * 10 // 360  # 10 degrees each side
+        
+        # Get indices around mid_idx (forward)
+        front_indices = [(mid_idx + i) % num_samples for i in range(-span, span+1)]
+        front_ranges = [self.lidar_ranges[i] for i in front_indices]
+        valid_ranges = [r for r in front_ranges if 0.1 < r <= self.max_gap_depth]
+        
+        min_dist = min(valid_ranges) if valid_ranges else self.max_gap_depth
+        rospy.logdebug("Straight distance check: %.2f meters", min_dist)
+        return min_dist
+
+    def change_angle(self, target_angle):
+        # target_angle is in radians, already adjusted for LIDAR rotation
+        angle_diff = math.degrees(target_angle)  # Convert to degrees for duration calculation
+        
+        twist = Twist()
+        # Positive angle = counterclockwise rotation
+        twist.angular.z = self.angular_speed if angle_diff > 0 else -self.angular_speed
+        
+        # Rotate for calculated duration
+        duration = abs(angle_diff) * math.pi / (180.0 * self.angular_speed)
+        start_time = rospy.Time.now()
+        
+        rospy.loginfo("Rotating %f degrees (%.2f radians)", angle_diff, target_angle)
+        
+        while (rospy.Time.now() - start_time).to_sec() < duration and not rospy.is_shutdown():
+            self.pub.publish(twist)
+            self.rate.sleep()
+            
+        # Stop rotation
+        twist.angular.z = 0
+        self.pub.publish(twist)
+        rospy.sleep(1.0)
+
+    def find_gaps(self):
+        if not self.lidar_ranges:
+            return []
+
+        gaps = []
+        gap_start = None
+        consecutive_valid = 0
+        num_samples = len(self.lidar_ranges)
+        min_consecutive = int((self.min_gap_width * num_samples) / 360.0)
+        
+        rospy.loginfo("Starting gap detection: samples=%d, min_consecutive=%d", 
+                    num_samples, min_consecutive)
+        
+        required_gap_width = 1
+        prevNonNone = None
+        for i in range(num_samples):
+            if i == 0:
+                continue
+            current = self.lidar_ranges[i]
+            
+            if current is not None and prevNonNone is not None and current - prevNonNone > required_gap_width:
+                gaps.append(Gap(i, i-1, current, num_samples))
+
+            if current is not None:
+                prevNonNone = current
+
+
+        return gaps
+
+    def get_random_traversable_gap(self, gaps):
+        if not gaps:
+            return None
+            
+        # Filter gaps that are too close or too far
+        valid_gaps = [gap for gap in gaps if self.min_gap_depth < gap.distance <= self.max_gap_depth]
+        rospy.loginfo("Valid gaps after distance filtering: %d", len(valid_gaps))
+        
+        if not valid_gaps:
+            return None
+
+        # Separate gaps into front and back
+        front_gaps = []
+        back_gaps = []
+        for gap in valid_gaps:
+            # Check if gap is in front half (-pi/2 to pi/2)
+            if abs(gap.angle) <= math.pi/2:
+                front_gaps.append(gap)
+                rospy.loginfo("Front gap: angle=%.1f degrees, distance=%.2f", 
+                            gap.angle_deg, gap.distance)
+            else:
+                back_gaps.append(gap)
+                rospy.loginfo("Back gap: angle=%.1f degrees, distance=%.2f", 
+                            gap.angle_deg, gap.distance)
+
+        rospy.loginfo("Found %d front gaps and %d back gaps", 
+                     len(front_gaps), len(back_gaps))
+
+        # 80% chance to choose from front gaps if available
+        if front_gaps and (random.random() < 0.8 or not back_gaps):
+            rospy.loginfo("Selecting from front gaps (80% probability)")
+            selected = random.choice(front_gaps)
+        elif back_gaps:
+            rospy.loginfo("Selecting from back gaps (20% probability)")
+            selected = random.choice(back_gaps)
+        else:
+            rospy.loginfo("No valid gaps found")
+            return None
+            
+        rospy.loginfo("Selected gap: angle=%.1f degrees, distance=%.2f", 
+                     selected.angle_deg, selected.distance)
+        return selected
+
+    def traverse_straight(self):
+        twist = Twist()
+        current_distance = self.straight_distance()
+        
+        # Adjust speed based on distance
+        if current_distance < self.min_gap_depth * 2:
+            # Slow down when approaching obstacles
+            speed_factor = current_distance / (self.min_gap_depth * 2)
+            twist.linear.x = self.linear_speed * speed_factor
+            rospy.logdebug("Slowing down: factor=%.2f, speed=%.2f", speed_factor, twist.linear.x)
+        else:
+            twist.linear.x = self.linear_speed
+            
+        self.pub.publish(twist)
+
+    def stop_robot(self):
+        twist = Twist()
+        self.pub.publish(twist)
+        rospy.loginfo("Robot stopped")
+        rospy.sleep(0.5)
+
+    def main_logic(self):
+        while not rospy.is_shutdown():
+            try:
+                # Find gaps
+                rospy.loginfo("\n--- Starting new navigation cycle ---")
+                gaps = self.find_gaps()
+                
+                if self.old_gap:
+                    # Avoid gaps close to the previous one
+                    old_gaps_count = len(gaps)
+                    gaps = [gap for gap in gaps if abs(gap.angle - self.old_gap.angle) > math.pi/6]  # 30 degrees in radians
+                    rospy.loginfo("Filtered %d gaps near previous gap (angle=%.1f degrees)", 
+                                old_gaps_count - len(gaps), self.old_gap.angle_deg)
+                
+                # Get random traversable gap
+                random_gap = self.get_random_traversable_gap(gaps)
+                if not random_gap:
+                    rospy.loginfo("No traversable gaps found - rotating to search")
+                    # Rotate in place to search for gaps
+                    twist = Twist()
+                    twist.angular.z = self.angular_speed
+                    self.pub.publish(twist)
+                    rospy.sleep(1.0)
+                    continue
+                
+                distance_to_gap = random_gap.distance
+                self.old_gap = random_gap
+                
+                # Change angle to face the gap
+                rospy.loginfo("Moving towards gap: angle=%.1f deg (%.2f rad), distance=%.2f m", 
+                            random_gap.angle_deg, random_gap.angle, distance_to_gap)
+                self.change_angle(random_gap.angle)
+                
+                # Traverse straight until near target distance
+                start_time = rospy.Time.now()
+                max_traverse_time = 10.0  # Maximum time to move in one direction
+                
+                while not rospy.is_shutdown():
+                    current_distance = self.straight_distance()
+                    rospy.loginfo("Navigation update - Current: %.2f m, Target: %.2f m", 
+                                current_distance, self.target_distance)
+                    
+                    # Break conditions
+                    if current_distance < self.min_gap_depth:
+                        rospy.loginfo("Too close to obstacle (%.2f m) - stopping", current_distance)
+                        break
+                    if current_distance < self.target_distance:
+                        rospy.loginfo("Reached target distance (%.2f m)", current_distance)
+                        break
+                    if (rospy.Time.now() - start_time).to_sec() > max_traverse_time:
+                        rospy.loginfo("Max traverse time (%.1f s) reached", max_traverse_time)
+                        break
+                        
+                    self.traverse_straight()
+                    self.rate.sleep()
+                
+                # Stop before next iteration
+                self.stop_robot()
+                
+            except Exception as e:
+                rospy.logerr("Error in control loop: %s", str(e))
+                self.stop_robot()
+
+if __name__ == '__main__':
+    try:
+        teleop = AutoTeleop()
+        teleop.main_logic()
+    except rospy.ROSInterruptException:
+        pass

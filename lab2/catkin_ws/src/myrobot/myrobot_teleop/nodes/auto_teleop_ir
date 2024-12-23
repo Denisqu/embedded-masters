@@ -1,0 +1,124 @@
+#!/usr/bin/env python
+
+import rospy
+from geometry_msgs.msg import Twist
+from sensor_msgs.msg import Range
+
+class AutoTeleop:
+    def __init__(self):
+        rospy.init_node('auto_teleop')
+        self.pub = rospy.Publisher('/controller/cmd_vel', Twist, queue_size=10)
+        
+        self.front_0_range = float('inf')  # Center sensor
+        self.front_1_range = float('inf')  # Left sensor
+        self.front_2_range = float('inf')  # Right sensor
+        
+        rospy.Subscriber('/myrobot/sensor/front_0', Range, self.front_0_callback)
+        rospy.Subscriber('/myrobot/sensor/front_1', Range, self.front_1_callback)
+        rospy.Subscriber('/myrobot/sensor/front_2', Range, self.front_2_callback)
+        
+        self.min_safe_distance = 0.3     
+        self.slow_down_distance = 0.6    
+        self.target_wall_distance = 0.175 
+        self.max_linear_speed = 0.5     
+        self.min_linear_speed = 0.1     
+        self.angular_speed = 0.8         
+        
+        self.is_searching = True
+        self.search_direction = 1
+        self.max_range = 0.35
+        
+        self.rate = rospy.Rate(10)
+        rospy.loginfo("Maze navigation started with speed control")
+
+    def front_0_callback(self, msg):
+        self.front_0_range = msg.range
+
+    def front_1_callback(self, msg):
+        self.front_1_range = msg.range
+
+    def front_2_callback(self, msg):
+        self.front_2_range = msg.range
+
+    def all_sensors_at_max(self):
+        return (abs(self.front_0_range - self.max_range) < 0.01 and
+                abs(self.front_1_range - self.max_range) < 0.01 and
+                abs(self.front_2_range - self.max_range) < 0.01)
+
+    def calculate_forward_speed(self, front_distance):
+        if front_distance <= self.min_safe_distance:
+            return 0.0
+        elif front_distance <= self.slow_down_distance:
+            speed_range = self.max_linear_speed - self.min_linear_speed
+            distance_range = self.slow_down_distance - self.min_safe_distance
+            speed_factor = (front_distance - self.min_safe_distance) / distance_range
+            return self.min_linear_speed + (speed_range * speed_factor)
+        else:
+            return self.max_linear_speed
+
+    def get_twist_command(self):
+        twist = Twist()
+        
+        rospy.loginfo("Sensors - Center: %.2f, Left: %.2f, Right: %.2f" % 
+                     (self.front_0_range, self.front_1_range, self.front_2_range))
+
+        if self.all_sensors_at_max():
+            if self.is_searching:
+                twist.linear.x = self.max_linear_speed
+                twist.angular.z = 0
+                rospy.loginfo("Searching for walls - moving forward")
+            else:
+                self.is_searching = True
+            return twist
+
+        self.is_searching = False
+        
+        forward_speed = self.calculate_forward_speed(self.front_0_range)
+        
+        if self.front_0_range < self.min_safe_distance:
+            twist.linear.x = 0.0
+            twist.angular.z = -self.angular_speed
+            rospy.loginfo("Wall ahead - turning right")
+            return twist
+            
+        if self.front_1_range < self.min_safe_distance * 0.57:
+            twist.linear.x = forward_speed * 0.5
+            twist.angular.z = -self.angular_speed
+            rospy.loginfo("Too close to left wall - adjusting right")
+            return twist
+            
+        if self.front_2_range < self.min_safe_distance * 0.57:
+            twist.linear.x = forward_speed * 0.5
+            twist.angular.z = self.angular_speed
+            rospy.loginfo("Too close to right wall - adjusting left")
+            return twist
+            
+        if self.front_2_range < self.max_range:
+            error = self.front_2_range - self.target_wall_distance
+            twist.linear.x = forward_speed
+            correction = error * 2.0
+            twist.angular.z = -correction
+            rospy.loginfo("Following left wall - speed: %.2f, correction: %.2f" % 
+                         (forward_speed, correction))
+        else:
+            twist.linear.x = forward_speed * 0.5
+            twist.angular.z = -self.angular_speed
+            rospy.loginfo("No left wall - turning right")
+            
+        return twist
+
+    def run(self):
+        while not rospy.is_shutdown():
+            try:
+                twist = self.get_twist_command()
+                self.pub.publish(twist)
+                self.rate.sleep()
+            except Exception as e:
+                rospy.logerr("Error in control loop: %s" % str(e))
+
+if __name__ == '__main__':
+    try:
+        teleop = AutoTeleop()
+        teleop.run()
+    except rospy.ROSInterruptException:
+        pass

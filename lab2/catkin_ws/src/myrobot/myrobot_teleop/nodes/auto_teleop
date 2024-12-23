@@ -1,269 +1,376 @@
 #!/usr/bin/env python
 
-# import rospy
-# from geometry_msgs.msg import Twist
-# from sensor_msgs.msg import Range
-
-# class AutoTeleop:
-#     def __init__(self):
-#         # Initialize the node
-#         rospy.init_node('auto_teleop')
-        
-#         # Create publisher for robot movement
-#         self.pub = rospy.Publisher('/controller/cmd_vel', Twist, queue_size=10)
-        
-#         # Initialize sensor values
-#         self.front_0_range = float('inf')  # Center sensor
-#         self.front_1_range = float('inf')  # Left sensor
-#         self.front_2_range = float('inf')  # Right sensor
-        
-#         # Subscribe to IR sensors
-#         rospy.Subscriber('/myrobot/sensor/front_0', Range, self.front_0_callback)  # Center
-#         rospy.Subscriber('/myrobot/sensor/front_1', Range, self.front_1_callback)  # Left
-#         rospy.Subscriber('/myrobot/sensor/front_2', Range, self.front_2_callback)  # Right
-        
-#         # Control parameters
-#         self.min_safe_distance = 0.3     # Minimum distance to obstacles
-#         self.target_wall_distance = 0.175   # Desired distance from wall
-#         self.linear_speed = 0.5         # Forward speed
-#         self.angular_speed = 0.8          # Turning speed
-        
-#         # Search pattern parameters
-#         self.is_searching = True          # Start in search mode
-#         self.search_direction = 1         # 1 for right, -1 for left
-#         self.max_range = 0.35            # Maximum sensor range
-        
-#         # Control rate (10 Hz)
-#         self.rate = rospy.Rate(10)
-        
-#         rospy.loginfo("Maze navigation started")
-
-#     def front_0_callback(self, msg):
-#         self.front_0_range = msg.range  # Center
-
-#     def front_1_callback(self, msg):
-#         self.front_1_range = msg.range  # Left
-
-#     def front_2_callback(self, msg):
-#         self.front_2_range = msg.range  # Right
-
-#     def all_sensors_at_max(self):
-#         # Check if all sensors are reading maximum range (no walls detected)
-#         return (abs(self.front_0_range - self.max_range) < 0.01 and
-#                 abs(self.front_1_range - self.max_range) < 0.01 and
-#                 abs(self.front_2_range - self.max_range) < 0.01)
-
-#     def get_twist_command(self):
-#         twist = Twist()
-        
-#         # Print sensor readings for debugging
-#         rospy.loginfo("Sensors - Center: %.2f, Left: %.2f, Right: %.2f" % 
-#                      (self.front_0_range, self.front_1_range, self.front_2_range))
-
-#         # If all sensors show max range, we need to search for walls
-#         if self.all_sensors_at_max():
-#             if self.is_searching:
-#                 # Move forward while turning slightly to search for walls
-#                 twist.linear.x = self.linear_speed
-#                 twist.angular.z = 0
-#                 rospy.loginfo("Searching for walls - moving forward")
-#             else:
-#                 # Start searching
-#                 self.is_searching = True
-#             return twist
-
-#         # We found a wall, stop searching
-#         self.is_searching = False
-        
-#         # Check if we're too close to a wall in front
-#         if self.front_0_range < self.min_safe_distance:
-#             # Stop and turn right if wall is directly ahead
-#             twist.linear.x = 0.0
-#             twist.angular.z = -self.angular_speed
-#             rospy.loginfo("Wall ahead - turning right")
-#             return twist
-            
-#         # Check left wall distance
-#         if self.front_1_range < self.min_safe_distance * 0.57:
-#             # Too close to left wall - turn slightly right
-#             twist.linear.x = self.linear_speed * 0.5
-#             twist.angular.z = -self.angular_speed
-#             rospy.loginfo("Too close to left wall - adjusting right")
-#             return twist
-            
-#         # Check right wall distance
-#         if self.front_2_range < self.min_safe_distance * 0.57:
-#             # Too close to right wall - turn slightly left
-#             twist.linear.x = self.linear_speed * 0.5
-#             twist.angular.z = self.angular_speed
-#             rospy.loginfo("Too close to right wall - adjusting left")
-#             return twist
-            
-#         # If we can detect the right wall but aren't too close
-#         if self.front_2_range < self.max_range:
-#             # Follow the right wall
-#             error = self.front_2_range - self.target_wall_distance
-#             twist.linear.x = self.linear_speed
-#             # Scale the correction based on the error
-#             correction = error * 2.0  # Proportional control
-#             twist.angular.z = -correction
-#             rospy.loginfo("Following right wall - correction: %.2f" % correction)
-#         else:
-#             # No right wall detected - turn right to find one
-#             twist.linear.x = self.linear_speed * 0.5
-#             twist.angular.z = -self.angular_speed
-#             rospy.loginfo("No right wall - turning right")
-            
-#         return twist
-
-#     def run(self):
-#         while not rospy.is_shutdown():
-#             try:
-#                 # Get and publish movement command
-#                 twist = self.get_twist_command()
-#                 self.pub.publish(twist)
-                
-#                 # Sleep to maintain control rate
-#                 self.rate.sleep()
-                
-#             except Exception as e:
-#                 rospy.logerr("Error in control loop: %s" % str(e))
-
-# if __name__ == '__main__':
-#     try:
-#         teleop = AutoTeleop()
-#         teleop.run()
-#     except rospy.ROSInterruptException:
-#         pass
-
-
-#!/usr/bin/env python
-
 import rospy
+import random
+import math
 from geometry_msgs.msg import Twist
-from sensor_msgs.msg import Range
+from sensor_msgs.msg import LaserScan
+from nav_msgs.msg import Odometry
+from tf.transformations import euler_from_quaternion
+from visualization_msgs.msg import Marker
+import time
+
+def polar_to_cartesian(r, theta):
+    x = r * math.cos(theta)
+    y = r * math.sin(theta)
+    return x, y
+
+class Gap:
+    def __init__(self, angle, distance):
+        self.angle = angle
+        self.distance = min(distance, 8.0)  # Cap at 8 meters
 
 class AutoTeleop:
     def __init__(self):
         rospy.init_node('auto_teleop')
         self.pub = rospy.Publisher('/controller/cmd_vel', Twist, queue_size=10)
+        self.lidar_ranges = []
+        self.angle_min = 0
+        self.angle_increment = 0
         
-        # Initialize sensor values
-        self.front_0_range = float('inf')  # Center sensor
-        self.front_1_range = float('inf')  # Left sensor
-        self.front_2_range = float('inf')  # Right sensor
-        
-        # Subscribe to IR sensors
-        rospy.Subscriber('/myrobot/sensor/front_0', Range, self.front_0_callback)
-        rospy.Subscriber('/myrobot/sensor/front_1', Range, self.front_1_callback)
-        rospy.Subscriber('/myrobot/sensor/front_2', Range, self.front_2_callback)
-        
+        # Subscribe to LIDAR
+        rospy.Subscriber('/myrobot/rplidar/scan', LaserScan, self.lidar_callback)
+        rospy.Subscriber('/controller/odom', Odometry, self.odom_callback)
+
         # Control parameters
-        self.min_safe_distance = 0.3     # Minimum distance to obstacles
-        self.slow_down_distance = 0.6    # Start slowing down at this distance
-        self.target_wall_distance = 0.175  # Desired distance from wall
-        self.max_linear_speed = 0.5      # Maximum forward speed
-        self.min_linear_speed = 0.1      # Minimum forward speed
-        self.angular_speed = 0.8         # Turning speed
-        
-        # Search pattern parameters
-        self.is_searching = True
-        self.search_direction = 1
-        self.max_range = 0.35
+        self.min_gap_width = 0.5  # Minimum width in meters for a traversable gap
+        self.min_gap_depth = 0.5  # Minimum depth in meters for a traversable gap
+        self.max_gap_depth = 12  # Maximum distance to consider for gaps
+        self.angular_speed = 0.4
+        self.linear_speed = 0.5
+        self.old_gap = None
+        self.target_distance = 1.0  # Target distance to maintain from obstacles
         
         self.rate = rospy.Rate(10)
-        rospy.loginfo("Maze navigation started with speed control")
+        self.current_position = {'x': 0, 'y': 0, 'theta': 0} 
+        rospy.loginfo("Gap-finding navigation started")
 
-    def front_0_callback(self, msg):
-        self.front_0_range = msg.range
+        # Add marker publisher
+        self.marker_pub = rospy.Publisher('debug_marker', Marker, queue_size=10)
+        self.start_time = time.time()
+        self.gaps = []
 
-    def front_1_callback(self, msg):
-        self.front_1_range = msg.range
+    def lidar_callback(self, msg):
+        self.lidar_ranges = [min(x if not math.isinf(x) else self.max_gap_depth, self.max_gap_depth) for x in msg.ranges]
+        self.angle_min = msg.angle_min
+        self.angle_increment = msg.angle_increment
+        rospy.logdebug("LIDAR data received: %d points", len(self.lidar_ranges))
+        self.publish_first_lidar_point_marker()
 
-    def front_2_callback(self, msg):
-        self.front_2_range = msg.range
+    def odom_callback(self, msg):
+        # Get position
+        self.current_position['x'] = msg.pose.pose.position.x
+        self.current_position['y'] = msg.pose.pose.position.y
+        
+        # Get orientation
+        orientation_q = msg.pose.pose.orientation
+        orientation_list = [orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w]
+        (roll, pitch, yaw) = euler_from_quaternion(orientation_list)
+        self.current_position['theta'] = yaw
+        rospy.logdebug("Position: (%.2f, %.2f) Orientation: %.2f degrees", 
+                      self.current_position['x'], 
+                      self.current_position['y'], 
+                      math.degrees(self.current_position['theta'])) 
 
-    def all_sensors_at_max(self):
-        return (abs(self.front_0_range - self.max_range) < 0.01 and
-                abs(self.front_1_range - self.max_range) < 0.01 and
-                abs(self.front_2_range - self.max_range) < 0.01)
-
-    def calculate_forward_speed(self, front_distance):
-        if front_distance <= self.min_safe_distance:
-            return 0.0
-        elif front_distance <= self.slow_down_distance:
-            # Calculate speed based on distance (linear interpolation)
-            speed_range = self.max_linear_speed - self.min_linear_speed
-            distance_range = self.slow_down_distance - self.min_safe_distance
-            speed_factor = (front_distance - self.min_safe_distance) / distance_range
-            return self.min_linear_speed + (speed_range * speed_factor)
-        else:
-            return self.max_linear_speed
-
-    def get_twist_command(self):
+    def change_angle(self, target_angle):
+        """
+        Rotate the robot to the target angle using current orientation feedback
+        target_angle: desired angle in radians
+        """
         twist = Twist()
+        error_threshold = math.radians(0.5)  # 0.5 degree threshold
         
-        rospy.loginfo("Sensors - Center: %.2f, Left: %.2f, Right: %.2f" % 
-                     (self.front_0_range, self.front_1_range, self.front_2_range))
+        while not rospy.is_shutdown():
+            # Calculate the shortest angle difference
+            current_angle = self.current_position['theta']
 
-        if self.all_sensors_at_max():
-            if self.is_searching:
-                twist.linear.x = self.max_linear_speed
-                twist.angular.z = 0
-                rospy.loginfo("Searching for walls - moving forward")
+            rospy.loginfo("rotating... current angle = %.1f", math.degrees(current_angle))
+
+            angle_diff = target_angle - current_angle
+            
+            # Check if we're close enough to target
+            if abs(angle_diff) < error_threshold:
+                break
+            
+            # Set angular velocity proportional to the difference
+            twist.angular.z = max(min(angle_diff, self.angular_speed), -self.angular_speed)
+            
+            if (self.gaps is not None):
+                for gap in self.gaps:
+                    self.publish_gap_marker(gap, len(self.gaps) - 1)
+            
+            self.pub.publish(twist)
+            self.rate.sleep()
+        
+        # Stop rotation
+        twist.angular.z = 0
+        self.pub.publish(twist)
+        rospy.loginfo("Robot rotated to angle %.1f degrees", math.degrees(target_angle))
+
+    
+
+    def publish_rotating_marker(self):
+        """
+        Publishes a marker 1 meter in front of the robot in odom frame
+        """
+        marker = Marker()
+        marker.header.frame_id = "odom"
+        marker.header.stamp = rospy.Time.now()
+        
+        # Set marker properties
+        marker.ns = "debug_markers"
+        marker.id = 100
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+        
+        # Set marker size
+        marker.scale.x = 0.2
+        marker.scale.y = 0.2
+        marker.scale.z = 0.2
+        
+        # Set marker color (red)
+        marker.color.r = 1.0
+        marker.color.g = 0.0
+        marker.color.b = 0.0
+        marker.color.a = 1.0
+        
+        # Calculate position 1 meter in front of robot in odom frame
+        robot_theta = self.current_position['theta']
+        marker.pose.position.x = self.current_position['x'] + math.cos(robot_theta)  # 1m forward in robot's direction
+        marker.pose.position.y = self.current_position['y'] + math.sin(robot_theta)  # 1m forward in robot's direction
+        marker.pose.position.z = 0.5  # Slightly above ground
+        
+        # Set marker orientation (identity quaternion)
+        marker.pose.orientation.x = 0.0
+        marker.pose.orientation.y = 0.0
+        marker.pose.orientation.z = 0.0
+        marker.pose.orientation.w = 1.0
+        
+        self.marker_pub.publish(marker)
+
+    def publish_first_lidar_point_marker(self):
+        """
+        Publishes a yellow marker at the position of the first LIDAR point
+        """
+        if not self.lidar_ranges:
+            return
+            
+        marker = Marker()
+        marker.header.frame_id = "base_link"
+        marker.header.stamp = rospy.Time.now()
+        
+        # Set marker properties
+        marker.ns = "lidar_point_markers"
+        marker.id = 200
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+        
+        # Set marker size (smaller than gap markers)
+        marker.scale.x = 0.1
+        marker.scale.y = 0.1
+        marker.scale.z = 0.1
+        
+        # Set marker color (yellow)
+        marker.color.r = 1.0
+        marker.color.g = 1.0
+        marker.color.b = 0.0
+        marker.color.a = 1.0
+        
+        # Calculate position of first LIDAR point
+        first_angle = self.angle_min
+        first_distance = self.lidar_ranges[0]
+        
+        # Convert to Cartesian coordinates
+        marker.pose.position.x = first_distance * math.cos(first_angle)
+        marker.pose.position.y = first_distance * math.sin(first_angle)
+        marker.pose.position.z = 0.5  # Slightly above ground
+        
+        # Set marker orientation (identity quaternion)
+        marker.pose.orientation.x = 0.0
+        marker.pose.orientation.y = 0.0
+        marker.pose.orientation.z = 0.0
+        marker.pose.orientation.w = 1.0
+        
+        # Set lifetime (2 seconds)
+        marker.lifetime = rospy.Duration(2.0)
+        
+        self.marker_pub.publish(marker)
+
+    def find_gaps(self):
+        """
+        Find gaps in LIDAR data and visualize them with markers
+        Returns list of Gap objects
+        """
+        if not self.lidar_ranges:
+            return []
+
+        gaps = []
+        gap_start = None
+        num_samples = len(self.lidar_ranges)
+        
+        # Find gaps in LIDAR data
+        for i, distance in enumerate(self.lidar_ranges):
+            if gap_start is None:
+                gap_start = i
             else:
-                self.is_searching = True
-            return twist
+                if gap_start is not None:
+                    
+                    if (distance == self.max_gap_depth):
+                        continue
 
-        self.is_searching = False
+                    # Calculate gap width in meters using arc length formula
+                    start_angle = self.angle_min + (gap_start * self.angle_increment)
+                    end_angle = self.angle_min + (i * self.angle_increment)
+                    
+                    # Get start and end points in Cartesian coordinates
+                    start_x, start_y = polar_to_cartesian(self.lidar_ranges[gap_start], start_angle)
+                    end_x, end_y = polar_to_cartesian(self.lidar_ranges[i], end_angle)
+                    
+                    # Calculate gap width using Euclidean distance
+                    gap_width = math.sqrt((end_x - start_x)**2 + (end_y - start_y)**2)
+                    
+                    avg_distance = sum(self.lidar_ranges[gap_start:i]) / (i - gap_start)
+                    
+                    # Check if gap is wide enough (using meters)
+                    if gap_width >= self.min_gap_width:
+                        # print start_angle, end_angle
+                        rospy.loginfo("Gap found: start_angle=%.1f, end_angle=%.1f", math.degrees(start_angle), math.degrees(end_angle))        
+
+                        center_angle = (start_angle + end_angle) / 2
+                        
+                        # Create gap object with center angle and average distance
+                        gap = Gap(center_angle, avg_distance)
+                        gaps.append(gap)
+                        
+                        # Visualize gap with marker
+                        self.publish_gap_marker(gap, len(gaps) - 1)
+                    gap_start = i
         
-        # Calculate forward speed based on front sensor
-        forward_speed = self.calculate_forward_speed(self.front_0_range)
+        rospy.loginfo("Found %d gaps", len(gaps))
+        return gaps
+
+    def publish_gap_marker(self, gap, marker_id):
+        """
+        Publish a marker for a detected gap
+        """
+        marker = Marker()
+        marker.header.frame_id = "odom"
+        marker.header.stamp = rospy.Time.now()
+        marker.ns = "gap_markers"
+        marker.id = marker_id
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
         
-        if self.front_0_range < self.min_safe_distance:
-            twist.linear.x = 0.0
-            twist.angular.z = -self.angular_speed
-            rospy.loginfo("Wall ahead - turning right")
-            return twist
+        # Set marker size based on gap width
+        marker.scale.x = 0.3
+        marker.scale.y = 0.3
+        marker.scale.z = 0.3
+        
+        # Set color (green for gaps)
+        marker.color.r = 0.0
+        marker.color.g = 1.0
+        marker.color.b = 0.0
+        marker.color.a = 0.8
+        
+        # Calculate marker position
+        # Convert from polar (angle, distance) to Cartesian coordinates
+        x_local = gap.distance * math.cos(gap.angle)
+        y_local = gap.distance * math.sin(gap.angle)
+        
+        # Transform to robot's current position
+        marker.pose.position.x = self.current_position['x'] + x_local
+        marker.pose.position.y = self.current_position['y'] + y_local
+        marker.pose.position.z = 0.5  # Slightly above ground
+        
+        # Set marker orientation
+        marker.pose.orientation.x = 0.0
+        marker.pose.orientation.y = 0.0
+        marker.pose.orientation.z = 0.0
+        marker.pose.orientation.w = 1.0
+        
+        self.marker_pub.publish(marker)
+
+
+    def select_random_gap(self, gaps):
+        """
+        Select a random gap with preference for gaps in front of the robot
+        """
+        if not gaps:
+            return None
             
-        if self.front_1_range < self.min_safe_distance * 0.57:
-            twist.linear.x = forward_speed * 0.5
-            twist.angular.z = -self.angular_speed
-            rospy.loginfo("Too close to left wall - adjusting right")
-            return twist
-            
-        if self.front_2_range < self.min_safe_distance * 0.57:
-            twist.linear.x = forward_speed * 0.5
-            twist.angular.z = self.angular_speed
-            rospy.loginfo("Too close to right wall - adjusting left")
-            return twist
-            
-        if self.front_2_range < self.max_range:
-            error = self.front_2_range - self.target_wall_distance
-            twist.linear.x = forward_speed
-            correction = error * 2.0
-            twist.angular.z = -correction
-            rospy.loginfo("Following right wall - speed: %.2f, correction: %.2f" % 
-                         (forward_speed, correction))
+        # Separate gaps into front and side gaps
+        front_gaps = []
+        side_gaps = []
+        
+        for gap in gaps:
+            # Normalize gap angle relative to robot's current orientation
+            relative_angle = gap.angle - self.current_position['theta']
+            # Normalize to [-pi, pi]
+            while relative_angle > math.pi:
+                relative_angle -= 2 * math.pi
+            while relative_angle < -math.pi:
+                relative_angle += 2 * math.pi
+                
+            # Consider gaps within 90 degrees as "front" gaps
+            if abs(relative_angle) <= math.pi/2:  # pi/2 = 90 degrees
+                front_gaps.append(gap)
+            else:
+                side_gaps.append(gap)
+        
+        # 90% chance to select from front gaps if they exist
+        if front_gaps and random.random() < 0.9:
+            selected_gap = random.choice(front_gaps)
+            rospy.loginfo("Selected front gap")
         else:
-            twist.linear.x = forward_speed * 0.5
-            twist.angular.z = -self.angular_speed
-            rospy.loginfo("No right wall - turning right")
-            
-        return twist
+            # If no front gaps or 10% chance, select from all gaps
+            selected_gap = random.choice(gaps)
+            rospy.loginfo("Selected side gap")
+        
+        return selected_gap
 
-    def run(self):
+
+
+    def main_logic(self):
         while not rospy.is_shutdown():
             try:
-                twist = self.get_twist_command()
-                self.pub.publish(twist)
+
+                # Publish markers
+                self.publish_rotating_marker()
+
+                #print current position and theta
+                rospy.loginfo("Current position: (%.2f, %.2f) Orientation: %.2f degrees", 
+                      self.current_position['x'], 
+                      self.current_position['y'], 
+                      math.degrees(self.current_position['theta'])) 
+
+                # Find gaps
+                gaps = self.find_gaps()
+                # print every gap
+                for gap in gaps:
+                    rospy.loginfo("Gap: angle=%.1f deg (%.2f rad), distance=%.2f m", 
+                                math.degrees(gap.angle), gap.angle, gap.distance)
+                
+                # Select random gap
+                selected_gap = self.select_random_gap(gaps)
+                
+                if selected_gap:
+                    pass
+                    # Calculate target angle relative to robot's current orientation
+                    #target_angle = selected_gap.angle
+                    #rospy.loginfo("Rotating to gap at angle %.1f degrees", math.degrees(target_angle))
+                    
+                    # Rotate robot to face the gap
+                    #self.change_angle(target_angle)
+                
                 self.rate.sleep()
+                
             except Exception as e:
-                rospy.logerr("Error in control loop: %s" % str(e))
+                rospy.logerr("Error in control loop: %s", str(e))
+                self.stop_robot()
 
 if __name__ == '__main__':
     try:
         teleop = AutoTeleop()
-        teleop.run()
+        teleop.main_logic()
     except rospy.ROSInterruptException:
         pass

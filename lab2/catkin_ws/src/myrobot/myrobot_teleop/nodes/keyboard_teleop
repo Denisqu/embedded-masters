@@ -11,10 +11,6 @@ class KeyboardTeleop:
     def __init__(self):
         rospy.init_node('keyboard_teleop')
 
-        cmd_vel_topic = rospy.get_param('/keyboard_teleop/cmd_vel', '/cmd_vel')
-        rospy.loginfo('Cmd Vel topic: ' + cmd_vel_topic)
-
-        #self.pub = rospy.Publisher(cmd_vel_topic, Twist, queue_size=10) 
         self.pub = rospy.Publisher('/controller/cmd_vel', Twist, queue_size=10) 
 
         self.key_state_vel = 0
@@ -23,8 +19,6 @@ class KeyboardTeleop:
         self.target_linear_vel   = 0.0
         self.target_angular_vel  = 0.0
         self.keyboard_listener = None
-        self.left_wheels_vel = 0.0
-        self.right_wheels_vel = 0.0
         
     def run(self):
         self.keyboard_listener = Listener(on_press=self.on_key_press, on_release=self.on_key_release)
@@ -40,15 +34,9 @@ class KeyboardTeleop:
         self.keyboard_listener.join()    
 
     def update_key_state(self):
-        # Calculate wheel velocities based on linear and angular commands
         self.target_linear_vel = self.key_state_vel * MINICAR_MAX_LIN_VEL * self.speed_mul
         self.target_angular_vel = self.key_state_ang * MINICAR_MAX_ANG_VEL * self.speed_mul
         
-        # Calculate individual wheel velocities for differential drive
-        self.left_wheels_vel = self.target_linear_vel - (self.target_angular_vel * 0.165)  # 0.165 is half the wheel base
-        self.right_wheels_vel = self.target_linear_vel + (self.target_angular_vel * 0.165)
-        
-        # Create and publish Twist message
         twist = Twist()
         twist.linear.x = self.target_linear_vel
         twist.linear.y = 0.0
@@ -62,13 +50,11 @@ class KeyboardTeleop:
         if key == KeyCode.from_char('w'):
             self.key_state_vel = 1
 		
-		# Forward/Backward controls
         if key == KeyCode.from_char('w'):
             self.key_state_vel = 1
         elif key == KeyCode.from_char('s'):
             self.key_state_vel = -1
         
-        # Left/Right controls
         elif key == KeyCode.from_char('a'):
             self.key_state_ang = 1
         elif key == KeyCode.from_char('d'):
@@ -81,13 +67,11 @@ class KeyboardTeleop:
         if key == KeyCode.from_char('w') and self.key_state_vel != 0:
             self.key_state_vel = 0
 			
-		# Reset forward/backward state
         if key == KeyCode.from_char('w') and self.key_state_vel > 0:
             self.key_state_vel = 0
         elif key == KeyCode.from_char('s') and self.key_state_vel < 0:
             self.key_state_vel = 0
         
-        # Reset left/right state
         elif key == KeyCode.from_char('a') and self.key_state_ang > 0:
             self.key_state_ang = 0
         elif key == KeyCode.from_char('d') and self.key_state_ang < 0:
