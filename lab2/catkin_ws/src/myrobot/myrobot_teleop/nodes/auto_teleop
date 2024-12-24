@@ -24,6 +24,19 @@ def cartesian_to_polar(x, y, degrees=False):
 
     return r, theta
 
+def normalize_angle(angle, degrees=False):
+    if degrees:
+        angle = math.radians(angle)
+
+    angle = angle % (2 * math.pi)
+
+    if angle > math.pi:
+        angle -= 2 * math.pi
+
+    if degrees:
+        angle = math.degrees(angle)
+
+    return angle
 
 class Gap:
     def __init__(self, angle, distance):
@@ -116,7 +129,7 @@ class AutoTeleop:
                       self.current_position['y'], 
                       math.degrees(self.current_position['theta'])) 
 
-    def change_angle(self, target_angle):
+    def change_angle(self, target_angle, selected_gap):
         """
         Rotate the robot to the target angle using current orientation feedback
         target_angle: desired angle in radians
@@ -125,6 +138,15 @@ class AutoTeleop:
         error_threshold = math.radians(0.5)  # 0.5 degree threshold
         
         while not rospy.is_shutdown():
+            if selected_gap is not None:
+                x, y = polar_to_cartesian(selected_gap.distance, selected_gap.angle)
+                self.visualization_manager.publish_marker_relative_to_robot(
+                    x, y, 
+                    ns="selected_gap", 
+                    id=1000, 
+                    color=(1, 1, 0),  # Yellow color (R=1, G=1, B=0)
+                    scale=0.2  # Slightly larger to distinguish it
+                )
             # Calculate the shortest angle difference
             current_angle = self.current_position['theta']
 
@@ -138,10 +160,6 @@ class AutoTeleop:
             
             # Set angular velocity proportional to the difference
             twist.angular.z = max(min(angle_diff, self.angular_speed), -self.angular_speed)
-            
-            if (self.gaps is not None):
-                for gap in self.gaps:
-                    self.publish_gap_marker(gap, len(self.gaps) - 1)
             
             self.pub.publish(twist)
             self.rate.sleep()
@@ -260,16 +278,18 @@ class AutoTeleop:
     def main_logic(self):
         while not rospy.is_shutdown():
             try:
-
-                #print current position and theta
                 rospy.loginfo("Current position: (%.2f, %.2f) Orientation: %.2f degrees", 
                       self.current_position['x'], 
                       self.current_position['y'], 
                       math.degrees(self.current_position['theta'])) 
 
+                self.change_angle(0, None)
+
                 # Find gaps
                 gaps = self.find_gaps()
-                # print every gap
+                self.gaps = gaps  # Store gaps for visualization during rotation
+
+                # Print every gap
                 for gap in gaps:
                     rospy.loginfo("Gap: angle=%.1f deg (%.2f rad), distance=%.2f m", 
                                 math.degrees(gap.angle), gap.angle, gap.distance)
@@ -278,13 +298,29 @@ class AutoTeleop:
                 selected_gap = self.select_random_gap(gaps)
                 
                 if selected_gap:
-                    pass
+                    x, y = polar_to_cartesian(selected_gap.distance, selected_gap.angle)
+                    self.visualization_manager.publish_marker_relative_to_robot(
+                    x, y, 
+                        ns="selected_gap", 
+                        id=1000, 
+                        color=(1, 1, 0),  # Yellow color (R=1, G=1, B=0)
+                        scale=0.2  # Slightly larger to distinguish it
+                    )
                     # Calculate target angle relative to robot's current orientation
-                    #target_angle = selected_gap.angle
-                    #rospy.loginfo("Rotating to gap at angle %.1f degrees", math.degrees(target_angle))
+                    # Normalize gap angle relative to robot's current orientation
+                    relative_angle = selected_gap.angle - self.current_position['theta']
+                    # Normalize to [-pi, pi]
+                    while relative_angle > math.pi:
+                        relative_angle -= 2 * math.pi
+                    while relative_angle < -math.pi:
+                        relative_angle += 2 * math.pi
+                    target_angle = relative_angle / 1.8 #normalize_angle(-1 * selected_gap.angle + math.radians(90))
+                    rospy.loginfo("Rotating to gap at angle %.1f degrees (source angle = %.1f degrees)", math.degrees(target_angle), math.degrees(selected_gap.angle))
                     
                     # Rotate robot to face the gap
-                    #self.change_angle(target_angle)
+                    self.change_angle(target_angle, selected_gap)
+                else:
+                    rospy.logwarn("No gaps found!")
                 
                 self.rate.sleep()
                 
