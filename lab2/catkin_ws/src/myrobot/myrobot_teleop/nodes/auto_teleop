@@ -28,7 +28,7 @@ def cartesian_to_polar(x, y, degrees=False):
 class Gap:
     def __init__(self, angle, distance):
         self.angle = angle
-        self.distance = min(distance, 8.0)  # Cap at 8 meters
+        self.distance = min(distance, 13)  # Cap at 13 meters
 
 class AutoTeleop:
     def __init__(self):
@@ -43,7 +43,7 @@ class AutoTeleop:
         rospy.Subscriber('/controller/odom', Odometry, self.odom_callback)
 
         # Control parameters
-        self.min_gap_width = 1  # Minimum width in meters for a traversable gap
+        self.min_gap_width = 2  # Minimum width in meters for a traversable gap
         self.min_gap_depth = 0.5  # Minimum depth in meters for a traversable gap
         self.max_gap_depth = 12  # Maximum distance to consider for gaps
         self.angular_speed = 0.4
@@ -402,14 +402,13 @@ class AutoTeleop:
                     # Calculate gap width using Euclidean distance
                     gap_width = math.sqrt((end_x - start_x)**2 + (end_y - start_y)**2)
                     
-                    avg_distance = (self.lidar_ranges[gap_start] + self.lidar_ranges[i]) / 2
-                    
                     # Check if gap is wide enough (using meters)
                     if gap_width >= self.min_gap_width:
                         # print start_angle, end_angle
                         self.publish_gap_endpoint_marker(start_angle, self.lidar_ranges[gap_start], marker_id)
                         self.publish_gap_endpoint_marker(end_angle, self.lidar_ranges[i], marker_id + 1)
-                        marker_id += 2
+                        self.publish_gap_endpoint_marker((start_angle + end_angle) / 2, ( self.lidar_ranges[i] + self.lidar_ranges[gap_start] ) / 2, marker_id + 2)
+                        marker_id += 3
 
                         middle_x, middle_y = (end_x + start_x) / 2, (end_y + start_y) / 2
                         center_distance, center_angle = cartesian_to_polar(middle_x, middle_y, degrees=False)
@@ -417,7 +416,7 @@ class AutoTeleop:
                         #print position of gap
                         rospy.loginfo("Gap center position: (%.2f, %.2f)", middle_x, middle_y)
                         # Create gap object with center angle and average distance
-                        gap = Gap(center_angle, center_distance)
+                        gap = Gap((start_angle + end_angle) / 2, ( self.lidar_ranges[i] + self.lidar_ranges[gap_start] ) / 2)
                         gaps.append(gap)
                         
                         # Visualize gap with marker
@@ -496,8 +495,8 @@ class AutoTeleop:
         y_local = gap.distance * math.sin(gap.angle)
         
         # Transform to robot's current position
-        marker.pose.position.x = self.current_position['x'] + x_local
-        marker.pose.position.y = self.current_position['y'] + y_local
+        marker.pose.position.x = x_local
+        marker.pose.position.y = y_local
         marker.pose.position.z = 0.5  # Slightly above ground
         
         # Set marker orientation
