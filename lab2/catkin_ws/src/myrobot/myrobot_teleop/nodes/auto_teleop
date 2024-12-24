@@ -15,6 +15,16 @@ def polar_to_cartesian(r, theta):
     y = r * math.sin(theta)
     return x, y
 
+def cartesian_to_polar(x, y, degrees=False):
+    r = math.sqrt(x**2 + y**2)
+    theta = math.atan2(y, x)
+
+    if degrees:
+        theta = math.degrees(theta)
+
+    return r, theta
+
+
 class Gap:
     def __init__(self, angle, distance):
         self.angle = angle
@@ -33,7 +43,7 @@ class AutoTeleop:
         rospy.Subscriber('/controller/odom', Odometry, self.odom_callback)
 
         # Control parameters
-        self.min_gap_width = 0.5  # Minimum width in meters for a traversable gap
+        self.min_gap_width = 1  # Minimum width in meters for a traversable gap
         self.min_gap_depth = 0.5  # Minimum depth in meters for a traversable gap
         self.max_gap_depth = 12  # Maximum distance to consider for gaps
         self.angular_speed = 0.4
@@ -56,6 +66,10 @@ class AutoTeleop:
         self.angle_increment = msg.angle_increment
         rospy.logdebug("LIDAR data received: %d points", len(self.lidar_ranges))
         self.publish_first_lidar_point_marker()
+        self.publish_tenth_lidar_point_marker() 
+        self.publish_390th_lidar_point_marker()
+        self.publish_199th_lidar_point_marker()
+
 
     def odom_callback(self, msg):
         # Get position
@@ -177,12 +191,161 @@ class AutoTeleop:
         marker.color.a = 1.0
         
         # Calculate position of first LIDAR point
-        first_angle = self.angle_min
+        first_angle = self.angle_min + math.radians(180)
         first_distance = self.lidar_ranges[0]
         
         # Convert to Cartesian coordinates
         marker.pose.position.x = first_distance * math.cos(first_angle)
         marker.pose.position.y = first_distance * math.sin(first_angle)
+        marker.pose.position.z = 0.5  # Slightly above ground
+        
+        # Set marker orientation (identity quaternion)
+        marker.pose.orientation.x = 0.0
+        marker.pose.orientation.y = 0.0
+        marker.pose.orientation.z = 0.0
+        marker.pose.orientation.w = 1.0
+        
+        # Set lifetime (2 seconds)
+        marker.lifetime = rospy.Duration(2.0)
+        
+        self.marker_pub.publish(marker)
+
+        #print position of marker
+        rospy.loginfo("First LIDAR point marker published at (%.2f, %.2f)", marker.pose.position.x, marker.pose.position.y)
+
+    
+    def publish_390th_lidar_point_marker(self):
+        """
+        Publishes a purple marker at the position of the 390th LIDAR point
+        """
+        if not self.lidar_ranges or len(self.lidar_ranges) < 390:
+            return
+            
+        marker = Marker()
+        marker.header.frame_id = "base_link"
+        marker.header.stamp = rospy.Time.now()
+        
+        # Set marker properties
+        marker.ns = "lidar_point_markers"
+        marker.id = 390  # Different ID for 390th point marker
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+        
+        # Set marker size (smaller than gap markers)
+        marker.scale.x = 0.1
+        marker.scale.y = 0.1
+        marker.scale.z = 0.1
+        
+        # Set marker color (purple)
+        marker.color.r = 0.5
+        marker.color.g = 0.0
+        marker.color.b = 0.5
+        marker.color.a = 1.0
+        
+        # Calculate position of 390th LIDAR point
+        point_angle = math.radians(180) +  self.angle_min + (389 * self.angle_increment)  # index 389 for 390th point
+        point_distance = self.lidar_ranges[389]
+        
+        # Convert to Cartesian coordinates
+        marker.pose.position.x = point_distance * math.cos(point_angle)
+        marker.pose.position.y = point_distance * math.sin(point_angle)
+        marker.pose.position.z = 0.5  # Slightly above ground
+        
+        # Set marker orientation (identity quaternion)
+        marker.pose.orientation.x = 0.0
+        marker.pose.orientation.y = 0.0
+        marker.pose.orientation.z = 0.0
+        marker.pose.orientation.w = 1.0
+        
+        # Set lifetime (2 seconds)
+        marker.lifetime = rospy.Duration(2.0)
+        
+        self.marker_pub.publish(marker)
+
+
+    def publish_tenth_lidar_point_marker(self):
+        """
+        Publishes a blue marker at the position of the 10th LIDAR point
+        """
+        if not self.lidar_ranges or len(self.lidar_ranges) < 10:
+            return
+            
+        marker = Marker()
+        marker.header.frame_id = "base_link"
+        marker.header.stamp = rospy.Time.now()
+        
+        # Set marker properties
+        marker.ns = "lidar_point_markers"
+        marker.id = 210  # Different ID from first point marker
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+        
+        # Set marker size (smaller than gap markers)
+        marker.scale.x = 0.1
+        marker.scale.y = 0.1
+        marker.scale.z = 0.1
+        
+        # Set marker color (blue)
+        marker.color.r = 0.0
+        marker.color.g = 0.0
+        marker.color.b = 1.0
+        marker.color.a = 1.0
+        
+        # Calculate position of 10th LIDAR point
+        tenth_angle = math.radians(180) + self.angle_min + (9 * self.angle_increment)  # index 9 for 10th point
+        tenth_distance = self.lidar_ranges[9]
+        
+        # Convert to Cartesian coordinates
+        marker.pose.position.x = tenth_distance * math.cos(tenth_angle)
+        marker.pose.position.y = tenth_distance * math.sin(tenth_angle)
+        marker.pose.position.z = 0.5  # Slightly above ground
+        
+        # Set marker orientation (identity quaternion)
+        marker.pose.orientation.x = 0.0
+        marker.pose.orientation.y = 0.0
+        marker.pose.orientation.z = 0.0
+        marker.pose.orientation.w = 1.0
+        
+        # Set lifetime (2 seconds)
+        marker.lifetime = rospy.Duration(2.0)
+        
+        self.marker_pub.publish(marker)
+
+    def publish_199th_lidar_point_marker(self):
+        """
+        Publishes an orange marker at the position of the 199th LIDAR point
+        """
+        if not self.lidar_ranges or len(self.lidar_ranges) < 199:
+            return
+            
+        marker = Marker()
+        marker.header.frame_id = "base_link"
+        marker.header.stamp = rospy.Time.now()
+        
+        # Set marker properties
+        marker.ns = "lidar_point_markers"
+        marker.id = 199  # Different ID for 199th point marker
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+        
+        # Set marker size (smaller than gap markers)
+        marker.scale.x = 0.1
+        marker.scale.y = 0.1
+        marker.scale.z = 0.1
+        
+        # Set marker color (orange)
+        marker.color.r = 1.0
+        marker.color.g = 0.65
+        marker.color.b = 0.0
+        marker.color.a = 1.0
+        
+        # Calculate position of 199th LIDAR point
+        point_angle = math.radians(180) + self.angle_min + (198 * self.angle_increment)  # index 198 for 199th point
+        point_distance = self.lidar_ranges[198]
+        
+        # Convert to Cartesian coordinates
+        marker.pose.position.x = point_distance * math.cos(point_angle)
+        marker.pose.position.y = point_distance * math.sin(point_angle)
         marker.pose.position.z = 0.5  # Slightly above ground
         
         # Set marker orientation (identity quaternion)
@@ -207,6 +370,16 @@ class AutoTeleop:
         gaps = []
         gap_start = None
         num_samples = len(self.lidar_ranges)
+
+        # Clear all previous gap markers
+        delete_marker = Marker()
+        delete_marker.header.frame_id = "base_link"
+        delete_marker.header.stamp = rospy.Time.now()
+        delete_marker.ns = "gap_markers"  # Same namespace as gap markers
+        delete_marker.action = Marker.DELETEALL  # This will delete all markers in this namespace
+        delete_marker.id = 0
+        self.marker_pub.publish(delete_marker)
+        marker_id = 0
         
         # Find gaps in LIDAR data
         for i, distance in enumerate(self.lidar_ranges):
@@ -219,8 +392,8 @@ class AutoTeleop:
                         continue
 
                     # Calculate gap width in meters using arc length formula
-                    start_angle = self.angle_min + (gap_start * self.angle_increment)
-                    end_angle = self.angle_min + (i * self.angle_increment)
+                    start_angle = math.radians(180) + self.angle_min + (gap_start * self.angle_increment)
+                    end_angle = math.radians(180) + self.angle_min + (i * self.angle_increment)
                     
                     # Get start and end points in Cartesian coordinates
                     start_x, start_y = polar_to_cartesian(self.lidar_ranges[gap_start], start_angle)
@@ -229,17 +402,22 @@ class AutoTeleop:
                     # Calculate gap width using Euclidean distance
                     gap_width = math.sqrt((end_x - start_x)**2 + (end_y - start_y)**2)
                     
-                    avg_distance = sum(self.lidar_ranges[gap_start:i]) / (i - gap_start)
+                    avg_distance = (self.lidar_ranges[gap_start] + self.lidar_ranges[i]) / 2
                     
                     # Check if gap is wide enough (using meters)
                     if gap_width >= self.min_gap_width:
                         # print start_angle, end_angle
-                        rospy.loginfo("Gap found: start_angle=%.1f, end_angle=%.1f", math.degrees(start_angle), math.degrees(end_angle))        
+                        self.publish_gap_endpoint_marker(start_angle, self.lidar_ranges[gap_start], marker_id)
+                        self.publish_gap_endpoint_marker(end_angle, self.lidar_ranges[i], marker_id + 1)
+                        marker_id += 2
 
-                        center_angle = (start_angle + end_angle) / 2
-                        
+                        middle_x, middle_y = (end_x + start_x) / 2, (end_y + start_y) / 2
+                        center_distance, center_angle = cartesian_to_polar(middle_x, middle_y, degrees=False)
+
+                        #print position of gap
+                        rospy.loginfo("Gap center position: (%.2f, %.2f)", middle_x, middle_y)
                         # Create gap object with center angle and average distance
-                        gap = Gap(center_angle, avg_distance)
+                        gap = Gap(center_angle, center_distance)
                         gaps.append(gap)
                         
                         # Visualize gap with marker
@@ -249,12 +427,52 @@ class AutoTeleop:
         rospy.loginfo("Found %d gaps", len(gaps))
         return gaps
 
+    def publish_gap_endpoint_marker(self, angle, distance, marker_id):
+        """
+        Publish a red marker for a gap endpoint
+        """
+        marker = Marker()
+        marker.header.frame_id = "base_link"
+        marker.header.stamp = rospy.Time.now()
+        
+        # Set marker properties
+        marker.ns = "gap_endpoint_markers"
+        marker.id = marker_id
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+        
+        # Set marker size (same as other LIDAR point markers)
+        marker.scale.x = 0.1
+        marker.scale.y = 0.1
+        marker.scale.z = 0.1
+        
+        # Set color (red)
+        marker.color.r = 1.0
+        marker.color.g = 0.0
+        marker.color.b = 0.0
+        marker.color.a = 1.0
+        
+        # Convert to Cartesian coordinates
+        marker.pose.position.x = distance * math.cos(angle)
+        marker.pose.position.y = distance * math.sin(angle)
+        marker.pose.position.z = 0.5
+        
+        # Set marker orientation
+        marker.pose.orientation.x = 0.0
+        marker.pose.orientation.y = 0.0
+        marker.pose.orientation.z = 0.0
+        marker.pose.orientation.w = 1.0
+        
+        # Set lifetime (2 seconds)
+        marker.lifetime = rospy.Duration(2.0)
+        self.marker_pub.publish(marker)
+
     def publish_gap_marker(self, gap, marker_id):
         """
         Publish a marker for a detected gap
         """
         marker = Marker()
-        marker.header.frame_id = "odom"
+        marker.header.frame_id = "base_link"
         marker.header.stamp = rospy.Time.now()
         marker.ns = "gap_markers"
         marker.id = marker_id
